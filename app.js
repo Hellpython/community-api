@@ -2,11 +2,10 @@ const jwt = require('jsonwebtoken');
 const express = require('express');
 
 const app = express();
-app.use(express.json()); // JSON 요청 본문 파싱
+app.use(express.json()); 
 
-// Authorization 헤더의 토큰을 검증하는 미들웨어
 function authRequired(req, res, next) {
-  const authHeader = req.headers.authorization;      // "Bearer eyJ..."
+  const authHeader = req.headers.authorization;      
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
@@ -15,8 +14,8 @@ function authRequired(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = payload.userId; // ★ 검증된 사용자 id를 요청에 심음
-    next();                      // 통과 → 다음 핸들러로
+    req.userId = payload.userId; 
+    next();                      
   } catch (err) {
     return res.status(401).json({ error: '유효하지 않은 토큰입니다' });
   }
@@ -41,16 +40,13 @@ const bcrypt = require('bcrypt');
 app.post('/auth/signup', async (req, res) => {
   const { email, password, nickname } = req.body;
 
-  // 입력 검증
+  
   if (!email || !password || !nickname) {
     return res.status(400).json({ error: 'email, password, nickname는 필수입니다' });
   }
 
   try {
-    // 비밀번호는 원문 저장 금지 → 해시만 저장
     const passwordHash = await bcrypt.hash(password, 10);
-
-    // ★ 파라미터화 쿼리 ($1,$2,$3) — SQL 인젝션 방지
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, nickname)
        VALUES ($1, $2, $3)
@@ -58,9 +54,9 @@ app.post('/auth/signup', async (req, res) => {
       [email, passwordHash, nickname]
     );
 
-    res.status(201).json(result.rows[0]); // ★ password_hash는 반환 안 함
+    res.status(201).json(result.rows[0]); 
   } catch (err) {
-    if (err.code === '23505') { // UNIQUE 위반 = 이메일 중복
+    if (err.code === '23505') { 
       return res.status(409).json({ error: '이미 가입된 이메일입니다' });
     }
     console.error(err);
@@ -76,14 +72,12 @@ app.post('/auth/login', async (req, res) => {
   }
 
   try {
-    // 1) email로 유저 찾기
     const result = await pool.query(
       'SELECT id, email, password_hash FROM users WHERE email = $1',
       [email]
     );
     const user = result.rows[0]; // 없으면 undefined
-
-    // 2) 유저 없음 / 비번 틀림 → 똑같은 401 (어느 쪽인지 안 알려줌 = enumeration 방지)
+    
     if (!user) {
       return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다' });
     }
@@ -93,7 +87,6 @@ app.post('/auth/login', async (req, res) => {
       return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다' });
     }
 
-    // 3) 토큰 발급 (1시간 유효)
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET,
@@ -107,7 +100,7 @@ app.post('/auth/login', async (req, res) => {
   }
 });
 
-app.post('/posts', authRequired, async (req, res) => {  // ★ authRequired 통과해야 도달
+app.post('/posts', authRequired, async (req, res) => {  
   const { title, content } = req.body;
 
   if (!title || !content) {
@@ -119,7 +112,7 @@ app.post('/posts', authRequired, async (req, res) => {  // ★ authRequired 통�
       `INSERT INTO posts (user_id, title, content)
        VALUES ($1, $2, $3)
        RETURNING id, user_id, title, content, created_at`,
-      [req.userId, title, content]   // ★ user_id는 토큰에서 (req.body 아님!)
+      [req.userId, title, content]   
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -129,10 +122,9 @@ app.post('/posts', authRequired, async (req, res) => {  // ★ authRequired 통�
 });
 
 app.get('/posts', async (req, res) => {
-  // 쿼리스트링에서 page, limit 받기 (없으면 기본값)
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
-  const offset = (page - 1) * limit;   // ★ 앞에서 몇 개 건너뛸지
+  const offset = (page - 1) * limit;  
 
   try {
     const result = await pool.query(
@@ -145,7 +137,6 @@ app.get('/posts', async (req, res) => {
       [limit, offset]
     );
 
-    // 전체 글 수 (총 몇 페이지인지 알려주려고)
     const countResult = await pool.query('SELECT COUNT(*) FROM posts');
     const total = parseInt(countResult.rows[0].count);
 
@@ -297,12 +288,10 @@ app.get('/posts/:id/comments', async (req, res) => {
   }
 });
 
-// 위 라우트에 아무것도 안 걸린 요청 → 404 (JSON)
 app.use((req, res) => {
   res.status(404).json({ error: '요청한 경로를 찾을 수 없습니다' });
 });
 
-// 중앙 에러 핸들러 — 어디서 터지든 한 곳에서 처리 (인자 4개가 핵심!)
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: '서버 오류' });
