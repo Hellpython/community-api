@@ -236,4 +236,47 @@ app.delete('/posts/:id', authRequired, async (req, res) => {
   }
 });
 
+app.post('/posts/:id/comments', authRequired, async (req, res) => {
+  const { content } = req.body;
+
+  if (!content) {
+    return res.status(400).json({ error: 'content는 필수입니다' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO comments (post_id, user_id, content)
+       VALUES ($1, $2, $3)
+       RETURNING id, post_id, user_id, content, created_at`,
+      [req.params.id, req.userId, content]
+    );
+
+    res.status(201).json(result.rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
+app.get('/posts/:id/comments', async (req, res) => {
+  try {
+      const result = await pool.query(
+        `SELECT comments.id, comments.content, comments.created_at,
+                users.nickname AS author
+         FROM comments
+          JOIN users ON comments.user_id = users.id
+          WHERE comments.post_id = $1
+          ORDER BY comments.created_at ASC`,
+          [req.params.id]
+        );
+
+      res.json(result.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
 app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
