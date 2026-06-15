@@ -28,8 +28,6 @@ app.get('/health', (req, res) => {
 });
 
 const PORT = 3000;
-app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
-
 const pool = require('./src/db/pool');
 
 // DB 연결 확인용
@@ -129,3 +127,113 @@ app.post('/posts', authRequired, async (req, res) => {  // ★ authRequired 통�
     res.status(500).json({ error: '서버 오류' });
   }
 });
+
+app.get('/posts', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT posts.id, posts.title, posts.content, posts.created_at,
+              users.nickname AS author
+       FROM posts
+       JOIN users ON posts.user_id = users.id
+       ORDER BY posts.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
+app.get('/posts/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT posts.id, posts.title, posts.content, posts.created_at,
+              users.nickname AS author
+       FROM posts
+       JOIN users ON posts.user_id = users.id
+       WHERE posts.id = $1`,
+      [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '게시글을 찾을 수 없습니다' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류' });
+  }
+}); 
+
+app.put('/posts/:id', authRequired, async (req, res) => {
+  const { title, content } = req.body;
+
+  if (!title || !content) {
+    return res.status(400).json({ error: 'title, content는 필수입니다' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT user_id
+       FROM posts
+       WHERE posts.id = $1`,
+      [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '게시글을 찾을 수 없습니다' });
+    }
+
+    if (result.rows[0].user_id !== req.userId) {
+      return res.status(403).json({ error: '권한이 없습니다' });
+    }
+
+    const updateResult = await pool.query(
+      `UPDATE posts
+       SET title = $1, content = $2, updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, user_id, title, content, updated_at`,
+      [title, content, req.params.id]
+    );
+
+    res.json(updateResult.rows[0]);
+  
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
+app.delete('/posts/:id', authRequired, async (req, res) => {
+
+  try {
+    const result = await pool.query(
+      `SELECT user_id
+      FROM posts 
+      WHERE id = $1`,
+      [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '게시글을 찾을 수 없습니다' });
+    }
+
+    if (result.rows[0].user_id !== req.userId) {
+      return res.status(403).json({ error: '권한이 없습니다' });
+    }
+
+    await pool.query(
+      `DELETE FROM posts WHERE id = $1`,
+      [req.params.id]
+    );
+
+    res.json({ message: '삭제되었습니다' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
+app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
