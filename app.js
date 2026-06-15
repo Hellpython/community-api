@@ -297,4 +297,15 @@ app.get('/posts/:id/comments', async (req, res) => {
   }
 });
 
+// 위 라우트에 아무것도 안 걸린 요청 → 404 (JSON)
+app.use((req, res) => {
+  res.status(404).json({ error: '요청한 경로를 찾을 수 없습니다' });
+});
+
+// 중앙 에러 핸들러 — 어디서 터지든 한 곳에서 처리 (인자 4개가 핵심!)
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: '서버 오류' });
+});
+
 app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
