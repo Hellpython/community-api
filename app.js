@@ -1,8 +1,26 @@
 const jwt = require('jsonwebtoken');
 const express = require('express');
-const app = express();
 
+const app = express();
 app.use(express.json()); // JSON 요청 본문 파싱
+
+// Authorization 헤더의 토큰을 검증하는 미들웨어
+function authRequired(req, res, next) {
+  const authHeader = req.headers.authorization;      // "Bearer eyJ..."
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: '로그인이 필요합니다' });
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.userId = payload.userId; // ★ 검증된 사용자 id를 요청에 심음
+    next();                      // 통과 → 다음 핸들러로
+  } catch (err) {
+    return res.status(401).json({ error: '유효하지 않은 토큰입니다' });
+  }
+}
 
 // 서버 살아있나 확인용
 app.get('/health', (req, res) => {
@@ -85,6 +103,27 @@ app.post('/auth/login', async (req, res) => {
     );
 
     res.json({ token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류' });
+  }
+});
+
+app.post('/posts', authRequired, async (req, res) => {  // ★ authRequired 통과해야 도달
+  const { title, content } = req.body;
+
+  if (!title || !content) {
+    return res.status(400).json({ error: 'title, content는 필수입니다' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO posts (user_id, title, content)
+       VALUES ($1, $2, $3)
+       RETURNING id, user_id, title, content, created_at`,
+      [req.userId, title, content]   // ★ user_id는 토큰에서 (req.body 아님!)
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '서버 오류' });
