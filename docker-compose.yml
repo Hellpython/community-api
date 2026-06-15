@@ -1,17 +1,19 @@
 services:
   app:
     build: .
-    ports:
-      - "3000:3000"
+    container_name: board-api
     environment:
-      DB_HOST: db          # ★★ localhost 아님! 컨테이너끼리는 서비스 이름으로 통신
-      DB_PORT: 5432        # 컨테이너 내부 포트 (호스트 5433 아님)
+      DB_HOST: db
+      DB_PORT: 5432
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       JWT_SECRET: ${JWT_SECRET}
     depends_on:
       - db
+    networks:
+      - default
+      - iot-network
 
   db:
     image: postgres:16
@@ -20,11 +22,15 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-    ports:
-      - "5433:5432"
     volumes:
       - board-data:/var/lib/postgresql/data
-      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql  # 새 DB면 스키마 자동 적용
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - default
 
 volumes:
   board-data:
+
+networks:
+  iot-network:
+    external: true
